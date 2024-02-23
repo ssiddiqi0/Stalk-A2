@@ -23,7 +23,7 @@ struct addrinfo* sinR;
 pthread_t send_thread_id;
 int senderPort;
 static List* list_send; 
-
+extern volatile int shutDown;
 void *sender_thread() {
 	printf("------------------SENDER-------------\n");
     while(1){
@@ -56,6 +56,18 @@ void *sender_thread() {
 		// 	printf("SUCESS : Message sent successfully from udpSender\n");
 		// }
 		//receive_Signaller();
+		if (strcmp(message, "!\n") == 0) {
+                printf("Shutdown signal received. Exiting...\n");
+                
+                //shutDown = 1; /
+    
+				 close(sockfd); // Close the socket to clean up resources
+				// free(message); 
+				// message = NULL;
+				 send_waitForShutdown();
+				 
+				exit(0);
+            } 
         free(message);
         message = NULL; 
     }

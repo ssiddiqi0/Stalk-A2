@@ -22,7 +22,7 @@ static pthread_mutex_t _syncOkToListMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static pthread_cond_t _syncOkToAddCondVar = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t _syncOkToListAddMutex = PTHREAD_MUTEX_INITIALIZER;
-
+extern volatile int shutDown;
 pthread_t receiver_thread_id;
 int receiverPort;
 struct sockaddr_in sinRemote;
@@ -55,7 +55,19 @@ void *receiver_thread() {
             int bytesRx = recvfrom(sockfd, messageRx, MSG_MAX_LEN, 0, (struct sockaddr*) &sinN, &sin_len);
             if (bytesRx >= 0) {
                 messageRx[bytesRx] = '\0'; // Null terminate the received message
-                //printf("Message received (%d bytes): '%s'\n", bytesRx, messageRx);          
+                //printf("Message received (%d bytes): '%s'\n", bytesRx, messageRx);  
+
+                if (strcmp(messageRx, "!\n") == 0) {
+                printf("Shutdown signal received. Exiting...\n");
+                 close(sockfd); // Close the socket to clean up resources
+				// free(messageRx); 
+			    //messageRx = NULL;
+                udpReceive_waitForShutdown();
+			
+			
+                exit(0);
+               
+            }      
             }
             char* message = (char*)malloc(sizeof(messageRx)); // or len(messageRx)
 			strncpy(message, messageRx, MSG_MAX_LEN);  // we could also add extra parameter for no of byte
