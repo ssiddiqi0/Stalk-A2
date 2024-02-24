@@ -1,66 +1,84 @@
-// screen output
+// this code formating and concept is  taken form brain fraser's video of such as message use of messageRx, fgets,
+// and the way declaring thread using mutex, init, signallers, waitforshutdown functions and encapsulating the code to keep main clean
+
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
 #include <netdb.h>    
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
 #include "screenOutput.h"
 #include "udpReceive.h"
 #include "udpSender.h"
 #include "keyboardInput.h"
 #include "list.h"
 
-#define MSG_MAX_LEN 2000
+#define MAX_LEN 256
 static pthread_t keyboardInput_thread_id;
 
-static pthread_mutex_t _syncOkToAKeyboardMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t KeyboardMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t keyboardCondMutex = PTHREAD_COND_INITIALIZER;
 
-List* list_send;
+static pthread_mutex_t ListCriticalSectionMutex = PTHREAD_MUTEX_INITIALIZER;
 
-void *keyboardInput_thread(){    
-    printf("------------------KEYBOARD-------------\n");
+List* list_send;
+void* keyboardInput_thread(){    
+
     while (1){
+
         char* message;
-        char messageRx[MSG_MAX_LEN];
-        fgets(messageRx, MSG_MAX_LEN, stdin);
-        //printf("string from user is : %s\n", messageRx);
+        char messageRx[MAX_LEN];
+        fgets(messageRx, MAX_LEN, stdin);
+
         while(1){
-            char* message = (char*)malloc(strlen(messageRx));  // or len(messageRx)
+            char* message = (char*)malloc(strlen(messageRx)); 
 			strncpy(message, messageRx, strlen(messageRx));
-            int listApmessagependStatus = List_append(list_send, message); 
-            if (listApmessagependStatus == -1){
-                pthread_mutex_lock(&_syncOkToAKeyboardMutex);
+            
+            int listAppendStatus; 
+            pthread_mutex_lock(&ListCriticalSectionMutex);
+            {				
+                // mutex lock when accessing critical section
+                listAppendStatus = List_append(list_send, message); 
+            }
+            pthread_mutex_unlock(&ListCriticalSectionMutex);
+
+            // if list append succes then signal the udpSender there is new msg on list
+            // else if list append fail means no new space no list wait until recevies signal there is empty node to add
+            if (listAppendStatus == -1){
+                pthread_mutex_lock(&KeyboardMutex);
                 {				
-                    pthread_cond_wait(&keyboardCondMutex, &_syncOkToAKeyboardMutex);
+                    pthread_cond_wait(&keyboardCondMutex, &KeyboardMutex);
                 }
-                pthread_mutex_unlock(&_syncOkToAKeyboardMutex);
+                pthread_mutex_unlock(&KeyboardMutex);
                 List_append(list_send, message);
-            }else{
-                //printf("KeyBoard: new msg called : send_Singaller\n");
+            }
+            else{
+                // signal if udp_rececive new node available if it is waiting to add new msg on list if full 
                 send_Singaller();
+                // user input message is "!" in single line then pthread cancel all the thread To interrupt a running thread
+                if (*(message) == '!'){
+                    cancelReceive_thread();
+                    cancelScreen_thread();
+                    cancelKeyboard_thread();
+                    cancelSender_thread();
+                    return NULL;
+                }
                 break;
             }
-            //receive_ScreenSignaller(); 
-            // signal if udp_rececive new node available if it is waiting to add new msg on list if full 
             free(message);
-            message = NULL;
         }
     } 
     return NULL;
 }
 
 void keyboardInput_Signaller(){
-    pthread_mutex_lock(&_syncOkToAKeyboardMutex);
+    pthread_mutex_lock(&KeyboardMutex);
     {
         pthread_cond_signal(&keyboardCondMutex);
     }
-    pthread_mutex_unlock(&_syncOkToAKeyboardMutex);
+    pthread_mutex_unlock(&KeyboardMutex);
 }
 
 void keyboard_Init(List* list_s){
@@ -68,7 +86,17 @@ void keyboard_Init(List* list_s){
     pthread_create(&keyboardInput_thread_id, NULL, keyboardInput_thread, NULL);
 }
 
-
+// cancel thread for terminating condition of "!"
+void cancelKeyboard_thread(){
+    //printf("Keyboard Thread cancelled\n");
+    pthread_cancel(keyboardInput_thread_id);
+}
 void keyboard_waitForShutdown(){
+     // allow to wait for other threads to join 
     pthread_join(keyboardInput_thread_id, NULL);
+
+     // destroy mutex after joining to make sure no other thread is using mutex which can cause deadlock
+    pthread_mutex_destroy(&KeyboardMutex);
+    pthread_cond_destroy(&keyboardCondMutex);
+    pthread_mutex_destroy(&ListCriticalSectionMutex);
 }

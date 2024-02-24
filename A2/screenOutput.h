@@ -3,6 +3,8 @@
 
 void screen_Init();
 void screen_Signaller();
+void cancelScreen_thread();
 void screen_waitForShutdown();
+void freemsg();
 
 #endif

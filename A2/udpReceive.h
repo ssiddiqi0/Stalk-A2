@@ -2,7 +2,7 @@
 #define _UDPRECEIVE_H
 
 void udpReceive_Init();
-void receive_Signaller();
+void cancelReceive_thread();
 void receive_ScreenSignaller();
 void udpReceive_waitForShutdown();
 

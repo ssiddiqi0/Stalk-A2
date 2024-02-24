@@ -14,87 +14,99 @@
 #include "keyboardInput.h"
 #include "list.h"
 
-#define MSG_MAX_LEN 2000
+#define MAX_LEN 256
 static List* list_receive; 
 
-static pthread_cond_t _syncOkToPrintCondVar = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t _syncOkToListMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t syncOkToAddCondVar = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t syncOkToListAddMutex = PTHREAD_MUTEX_INITIALIZER;
 
-static pthread_cond_t _syncOkToAddCondVar = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t _syncOkToListAddMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t ListCriticalSectionMutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_t receiver_thread_id;
-int receiverPort;
-struct sockaddr_in sinRemote;
+int receiverPort;  // local port passed from main to bind and receive msg
 
-void *receiver_thread() {
+void* receiver_thread() {
 
-   printf("------------------RECEIVE-------------\n");
-   
+    // refernce: https://beej.us/guide/bgnet/html/split/client-server-background.html#datagram 
+    // refernce: Brian Fraser Assignment 2 videos for sockets
+
+    struct sockaddr_in sinOtherSide;
     int sockfd;
     if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Receiver: socket");
     }
-    memset(&sinRemote, 0, sizeof(sinRemote));
-	sinRemote.sin_family = AF_INET;
-	sinRemote.sin_addr.s_addr = htonl(INADDR_ANY);
-	sinRemote.sin_port = htons(receiverPort);
+    
+    memset(&sinOtherSide, 0, sizeof(sinOtherSide));
+	sinOtherSide.sin_family = AF_INET;
+	sinOtherSide.sin_addr.s_addr = htonl(INADDR_ANY);
+	sinOtherSide.sin_port = htons(receiverPort);
 
-	if (bind(sockfd, (struct sockaddr*) &sinRemote, sizeof(sinRemote)) < 0) {
-		//printf("ERROR: Socket could not be bound\nExiting program\n");
-        perror("server: bind");
-		close(sockfd);
+	if (bind(sockfd, (struct sockaddr*) &sinOtherSide, sizeof(sinOtherSide)) == -1) {
+        close(sockfd);
+        perror("Bind: Error");	
 	}
    
 	while (1) {
-        struct sockaddr_in sinN; // Address of sender
-		unsigned int sin_len = sizeof(sinN);
-        char messageRx[MSG_MAX_LEN];
+        struct sockaddr_in their_addr; 
+		socklen_t addr_len = sizeof(their_addr);
+        char messageRx[MAX_LEN];
       
         while (1){
-            int bytesRx = recvfrom(sockfd, messageRx, MSG_MAX_LEN, 0, (struct sockaddr*) &sinN, &sin_len);
+            int bytesRx = recvfrom(sockfd, messageRx, MAX_LEN-1, 0, (struct sockaddr*) &their_addr, &addr_len);
+
+            // Null terminate the received message
             if (bytesRx >= 0) {
-                messageRx[bytesRx] = '\0'; // Null terminate the received message
-                //printf("Message received (%d bytes): '%s'\n", bytesRx, messageRx);          
+                messageRx[bytesRx] = '\0';         
             }
-            char* message = (char*)malloc(sizeof(messageRx)); // or len(messageRx)
-			strncpy(message, messageRx, MSG_MAX_LEN);  // we could also add extra parameter for no of byte
-            int listAppendStatus = List_append(list_receive, message); // or may be list_remove method
+
+            // allocate memory for the msg
+            char* message = (char*)malloc(sizeof(messageRx));
+			strncpy(message, messageRx, MAX_LEN); 
+
+            int listAppendStatus;
+            pthread_mutex_lock(&ListCriticalSectionMutex);
+            {				
+                // mutex lock when accessing critical section
+                listAppendStatus = List_append(list_receive, message); 
+            }
+            pthread_mutex_unlock(&ListCriticalSectionMutex);
+            
+            // if list append is successful it will signal screen there is new msg on list, if not successful wait for signal
             if (listAppendStatus == -1){
-                pthread_mutex_lock(&_syncOkToListAddMutex);
+                pthread_mutex_lock(&syncOkToListAddMutex);
                 {				
-                    pthread_cond_wait(&_syncOkToAddCondVar, &_syncOkToListAddMutex);
+                    pthread_cond_wait(&syncOkToAddCondVar, &syncOkToListAddMutex);
                     List_append(list_receive, message);
                 }
-                pthread_mutex_unlock(&_syncOkToListAddMutex);
+                pthread_mutex_unlock(&syncOkToListAddMutex);
             }
             else{
-                screen_Signaller(); // sigal screen there is new msg to print on screen
+                screen_Signaller(); // signal screen there is new msg to print on screen
+
+                // if message is "!" cancel all the threads
+                if (*(message) == '!'){
+                    // printf("message == ! => in udpReceive.c\n");
+                    cancelReceive_thread();
+                    cancelScreen_thread();
+                    cancelKeyboard_thread();
+                    cancelSender_thread();
+                    return NULL;
+                }   
             }
-            // free(message);
-            // message = NULL;
+            break;
         } 
         
-        //close(sockfd);   // not sure where this will go
     }
+    close(sockfd);  
     return NULL;
 }
 
-// wait for signal from sender, signal to open socket and receieve msg
-void receive_Signaller() {
-    pthread_mutex_lock(&_syncOkToListMutex);
-	{
-		pthread_cond_signal(&_syncOkToPrintCondVar);
-	}
-	pthread_mutex_unlock(&_syncOkToListMutex);
-}
-
 void receive_ScreenSignaller() {
-    pthread_mutex_lock(&_syncOkToListAddMutex);
+    pthread_mutex_lock(&syncOkToListAddMutex);
 	{
-		pthread_cond_signal(&_syncOkToAddCondVar);
+		pthread_cond_signal(&syncOkToAddCondVar);
 	}
-	pthread_mutex_unlock(&_syncOkToListAddMutex);
+	pthread_mutex_unlock(&syncOkToListAddMutex);
 }
  
  
@@ -104,6 +116,15 @@ void udpReceive_Init(List* list_r, int Rport) {
     pthread_create(&receiver_thread_id, NULL, receiver_thread, NULL);
 }
 
+// cancel thread for terminating condition of "!"
+void cancelReceive_thread(){
+    //printf("udpReceive Thread cancelled\n");
+    pthread_cancel(receiver_thread_id);
+}
+
 void udpReceive_waitForShutdown() {
     pthread_join(receiver_thread_id, NULL);
+    pthread_cond_destroy(&syncOkToAddCondVar);
+    pthread_mutex_destroy(&syncOkToListAddMutex);
+    pthread_mutex_destroy(&ListCriticalSectionMutex);
 }
