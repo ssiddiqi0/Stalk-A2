@@ -19,7 +19,7 @@
 static pthread_cond_t syncOkToSendCondVar = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t syncOkToSendMutex = PTHREAD_MUTEX_INITIALIZER;
 
-// address and port of the sender will passed from main afte using getaddrinfo
+// Address and port of the sender will passed from main after using getaddrinfo
 struct addrinfo* sinR; 
 int senderPort;
 
@@ -34,7 +34,7 @@ void* sender_thread() {
 	int sockfd;
     while(1){
 
-		// wait for signal from keyboard input if there is new msg 
+		// Wait for signal from keyboard input if there is new msg 
 		pthread_mutex_lock(&syncOkToSendMutex);
 		{				
 			pthread_cond_wait(&syncOkToSendCondVar, &syncOkToSendMutex);
@@ -46,7 +46,7 @@ void* sender_thread() {
 		}
 		pthread_mutex_lock(&ListCriticalSectionMutex);
         {				
-            // mutex lock when accessing critical section
+            // Mutex lock when accessing critical section
             message = List_trim(list_send);  
         }
         pthread_mutex_unlock(&ListCriticalSectionMutex);
@@ -56,19 +56,19 @@ void* sender_thread() {
 		}
 	
 		if (*(message) == '!'){
-			// if user types "!" we need to free message memory
+			// If user types "!" we need to free message memory
 	        free(message);
         	message = NULL; 
             return NULL;
         }
-		// free alloacated memory of message after sending message 
+		// Free alloacated memory of message after sending message 
         free(message); 
     }
 	close(sockfd); 
     return NULL;
 }
 
-// signal the waiting mutex when recives signal from keyboard there is new msg on screen
+// Signal the waiting mutex when recives signal from keyboard there is new msg on screen
 void send_Singaller() {
     pthread_mutex_lock(&syncOkToSendMutex);
 	{
@@ -84,14 +84,14 @@ void send_Init(List* list, struct addrinfo** remote, int Sport) {
     pthread_create(&send_thread_id, NULL, sender_thread, NULL);
 }
 
-// cancel thread for terminating condition of "!"
+// Cancel thread for terminating condition of "!"
 void cancelSender_thread(){
-	//printf("UdpSender Thread cancelled\n");
+
     pthread_cancel(send_thread_id);
 }
 
 void send_waitForShutdown() {
-	// just to make sure free the memory before join
+	// Just to make sure free the memory before join
 	if(message!= NULL){
 		free(message);
 		message = NULL;

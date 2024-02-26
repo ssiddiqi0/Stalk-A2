@@ -39,12 +39,12 @@ void* keyboardInput_thread(){
             int listAppendStatus; 
             pthread_mutex_lock(&ListCriticalSectionMutex);
             {				
-                // mutex lock when accessing critical section
+                // Mutex lock when accessing critical section
                 listAppendStatus = List_append(list_send, message); 
             }
             pthread_mutex_unlock(&ListCriticalSectionMutex);
 
-            // if list append succes then signal the udpSender there is new msg on list
+            // If list append succes then signal the udpSender there is new msg on list
             // else if list append fail means no new space no list wait until recevies signal there is empty node to add
             if (listAppendStatus == -1){
                 pthread_mutex_lock(&KeyboardMutex);
@@ -55,9 +55,9 @@ void* keyboardInput_thread(){
                 List_append(list_send, message);
             }
             else{
-                // signal if udp_rececive new node available if it is waiting to add new msg on list if full 
+                // Signal if udp_rececive new node available if it is waiting to add new msg on list if full 
                 send_Singaller();
-                // user input message is "!" in single line then pthread cancel all the thread To interrupt a running thread
+                // User input message is "!" in single line then pthread cancel all the thread To interrupt a running thread
                 if (*(message) == '!'){
                     cancelReceive_thread();
                     cancelScreen_thread();
@@ -86,16 +86,16 @@ void keyboard_Init(List* list_s){
     pthread_create(&keyboardInput_thread_id, NULL, keyboardInput_thread, NULL);
 }
 
-// cancel thread for terminating condition of "!"
+// Cancel thread for terminating condition of "!"
 void cancelKeyboard_thread(){
-    //printf("Keyboard Thread cancelled\n");
+
     pthread_cancel(keyboardInput_thread_id);
 }
 void keyboard_waitForShutdown(){
-     // allow to wait for other threads to join 
+     // Allow to wait for other threads to join 
     pthread_join(keyboardInput_thread_id, NULL);
 
-     // destroy mutex after joining to make sure no other thread is using mutex which can cause deadlock
+     // Destroy mutex after joining to make sure no other thread is using mutex which can cause deadlock
     pthread_mutex_destroy(&KeyboardMutex);
     pthread_cond_destroy(&keyboardCondMutex);
     pthread_mutex_destroy(&ListCriticalSectionMutex);

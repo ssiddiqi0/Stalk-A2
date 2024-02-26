@@ -24,14 +24,14 @@ static pthread_mutex_t ListCriticalSectionMutex = PTHREAD_MUTEX_INITIALIZER;
 void* screen_thread(){
     while(1)
     {
-        // add condition to lock then wait for signal from udpReceiver if there is new msg on list
+        // Add condition to lock, then wait for signal from udpReceiver if there is new msg on list
         pthread_mutex_lock(&syncOkToAScreenMutex);
         {
             pthread_cond_wait(&screenCondMutex, &syncOkToAScreenMutex);
         }
         pthread_mutex_unlock(&syncOkToAScreenMutex);
         
-        // Critical section mutex
+        // Critical section mutex lock
         pthread_mutex_lock(&ListCriticalSectionMutex);
         {
            message = List_trim(list_receive);
@@ -39,13 +39,13 @@ void* screen_thread(){
         pthread_mutex_unlock(&ListCriticalSectionMutex);
         
         if (*(message) == '!'){
-            //message == ! free the already alloacted memory before join
+            // Free the already alloacted memory before join
             freemsg();
             return NULL;
         }
         printf("Message received: ");
         puts(message);
-        // free allocted memory of msg after use
+        // Free allocted memory of msg after use
         freemsg();
     }
     return NULL;
@@ -67,9 +67,9 @@ void screen_Init(List* list_s){
     pthread_create(&screenWriter_thread_id, NULL, screen_thread, NULL);
 }
 
-// cancel thread for terminating condition of "!"
+// Cancel thread for terminating condition of "!"
 void cancelScreen_thread(){
-   // printf("ScreenOutput Thread cancelled\n");
+
     pthread_cancel(screenWriter_thread_id);
 }
 
@@ -77,7 +77,7 @@ void screen_waitForShutdown(){
     if(message!=NULL){
         freemsg();
     }
-    // allow to wait for other threads to join 
+    // Allow to wait for other threads to join 
     pthread_join(screenWriter_thread_id, NULL);
     pthread_mutex_destroy(&syncOkToAScreenMutex);
     pthread_cond_destroy(&screenCondMutex);

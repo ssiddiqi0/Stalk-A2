@@ -15,10 +15,9 @@
 
 int main(int argc, char* argv[]) {
 	
-	//printf("Arguments (%d) are:\n", argc);
 	puts("Welcome");
 	
-	// refernce for: https://beej.us/guide/bgnet/html/split/client-server-background.html#datagram
+	// refrence for: https://beej.us/guide/bgnet/html/split/client-server-background.html#datagram
 	struct addrinfo hints, *servinfo;
 	memset(&hints, 0, sizeof(struct addrinfo));
 
@@ -46,10 +45,10 @@ int main(int argc, char* argv[]) {
 	udpReceive_waitForShutdown();
 	screen_waitForShutdown();
 
-	// free memory alloacted by getaddrinfo to servinfo
+	// Free memory alloacted by getaddrinfo to servinfo
 	freeaddrinfo(servinfo);
 
-	// free both list
+	// Free both list
 	List_free(list1, free);
 	List_free(list2, free);
 

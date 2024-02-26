@@ -59,19 +59,19 @@ void* receiver_thread() {
                 messageRx[bytesRx] = '\0';         
             }
 
-            // allocate memory for the msg
+            // Allocate memory for the msg
             char* message = (char*)malloc(sizeof(messageRx));
 			strncpy(message, messageRx, MAX_LEN); 
 
             int listAppendStatus;
             pthread_mutex_lock(&ListCriticalSectionMutex);
             {				
-                // mutex lock when accessing critical section
+                // Mutex lock when accessing critical section
                 listAppendStatus = List_append(list_receive, message); 
             }
             pthread_mutex_unlock(&ListCriticalSectionMutex);
             
-            // if list append is successful it will signal screen there is new msg on list, if not successful wait for signal
+            // If list append is successful it will signal screen there is new msg on list, if not successful wait for signal
             if (listAppendStatus == -1){
                 pthread_mutex_lock(&syncOkToListAddMutex);
                 {				
@@ -81,11 +81,11 @@ void* receiver_thread() {
                 pthread_mutex_unlock(&syncOkToListAddMutex);
             }
             else{
-                screen_Signaller(); // signal screen there is new msg to print on screen
+                screen_Signaller(); // Signal screen there is new msg to print on screen
 
-                // if message is "!" cancel all the threads
+                // If message is "!" cancel all the threads
                 if (*(message) == '!'){
-                    // printf("message == ! => in udpReceive.c\n");
+                   
                     cancelReceive_thread();
                     cancelScreen_thread();
                     cancelKeyboard_thread();
@@ -116,9 +116,9 @@ void udpReceive_Init(List* list_r, int Rport) {
     pthread_create(&receiver_thread_id, NULL, receiver_thread, NULL);
 }
 
-// cancel thread for terminating condition of "!"
+// Cancel thread for terminating condition of "!"
 void cancelReceive_thread(){
-    //printf("udpReceive Thread cancelled\n");
+
     pthread_cancel(receiver_thread_id);
 }
 
